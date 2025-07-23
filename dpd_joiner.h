@@ -12,9 +12,10 @@
 
 // Data types for DPD system
 typedef ap_fixed<24,8> data_t;    // Input/output data type (I/Q)
-typedef ap_fixed<24,8> coef_t;    // Coefficient type for LMS
+typedef ap_fixed<32,9> coef_t;    // Coefficient type for LMS
 typedef ap_fixed<24,6> phi_t;     // Basis function output type
 typedef ap_fixed<32,8> acc_t;     // Accumulator type for MAC
+typedef ap_fixed<48,4> update_t;
 
 // Complex coefficient struct
 typedef struct {
