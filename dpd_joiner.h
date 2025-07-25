@@ -4,18 +4,17 @@
 #include "ap_fixed.h"
 
 // CHANGE THIS: Reduce model complexity
-#define K 7 // Nonlinearity order
+#define K 13 // Nonlinearity order
 
 #ifndef MEMORY_DEPTH
-#define MEMORY_DEPTH 3  // Increased from 5 to handle the significant delay
+#define MEMORY_DEPTH 12  // Increased from 5 to handle the significant delay
 #endif
 
 // Data types for DPD system
 typedef ap_fixed<24,8> data_t;    // Input/output data type (I/Q)
-typedef ap_fixed<32,9> coef_t;    // Coefficient type for LMS
+typedef ap_fixed<24,8> coef_t;    // Coefficient type for LMS
 typedef ap_fixed<24,6> phi_t;     // Basis function output type
 typedef ap_fixed<32,8> acc_t;     // Accumulator type for MAC
-typedef ap_fixed<48,4> update_t;
 
 // Complex coefficient struct
 typedef struct {

@@ -1,7 +1,7 @@
 #include <ap_int.h>
 #include <ap_fixed.h>
 
-#define N 8192
+#define N 512
 #define W 16  // ADC resolution bits
 
 // FIXED: ADC that provides proper quantization AND compatible scaling
@@ -36,7 +36,7 @@ void dual_adc_system(
 
         // Step 2: Clamp to valid ADC range
         if (quantized_level_I < 0) quantized_level_I = 0;
-        if (quantized_level_I >= ADC_LEVELS) quantized_level_I = 1 - ADC_LEVELS;
+        if (quantized_level_I >= ADC_LEVELS) quantized_level_I = ADC_LEVELS - 1;
 
         // Step 3: Convert back to voltage (this is the "digital" representation)
         // This maintains signal levels while providing quantization effects

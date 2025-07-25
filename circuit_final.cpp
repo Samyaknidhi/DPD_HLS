@@ -13,12 +13,12 @@
 #include "hls_stream.h"
 #include "adc_joiner.h"
 
-#define MAX_INPUT_BYTES 8192
-#define DATA_LEN 8192
-#define MAX_SYMBOLS 32768
+#define MAX_INPUT_BYTES 512
+#define DATA_LEN 512
+#define MAX_SYMBOLS 2048
 #define INTERPOLATION_FACTOR 8
 #define DECIM_FACTOR 8
-#define DELAY_OFFSET 3 // Adjust as needed for your system
+#define DELAY_OFFSET 163  // Adjust as needed for your system
 
 typedef ap_fixed<24,8> fixed_t;
 typedef ap_fixed<24,8> data_t;
@@ -74,7 +74,7 @@ void circuit_final(
     // 1. Pulse shaping (feedforward)
     pulse_shape(i_symbols, q_symbols, i_psf, q_psf);
 
-    coef_t mu = adapt ? 0.000025 : 0.0; // Adaptation only if adapt==true
+    coef_t mu = adapt ? 0.000035 : 0.0; // Adaptation only if adapt==true
 
     ap_uint<8> phase_inc = 2;
 
@@ -141,7 +141,7 @@ void circuit_final(
         );
 
         // FIXED: More reasonable scaling
-        const sample_type DUC_SCALE = sample_type(100.0);  // Adjust based on your PA requirements
+        const sample_type DUC_SCALE = sample_type(50.0);  // Adjust based on your PA requirements
         for (int i = 0; i < DATA_LEN * INTERPOLATION_FACTOR; ++i) {
             duc_out[i] = duc_out[i] * DUC_SCALE;
         }
@@ -174,13 +174,13 @@ void circuit_final(
     // 5. DDC Stage (Feedback path) - COMPLETELY FIXED
     static rf_sample_t ddc_in[DATA_LEN * INTERPOLATION_FACTOR];
     for (int i = 0; i < DATA_LEN * INTERPOLATION_FACTOR; ++i) {
-        ddc_in[i] = rf_sample_t(amp_out_i[i] * data_t(1150.0));
+        ddc_in[i] = rf_sample_t(amp_out_i[i]);
     }
 
     ap_uint<32> ddc_freq_word = 0x40000000;  // Same frequency as DUC
 
     // FIXED: Reasonable DDC gain (was 25000, now much smaller)
-    ap_fixed<16,8> ddc_gain = 11500.0;  // Reduced by 1000x - will be further scaled in DDC
+    ap_fixed<16,8> ddc_gain = 100.0;  // Reduced by 1000x - will be further scaled in DDC
 
     // DDC automatically handles decimation: 65536 in -> 8192 out
     ddc_demodulator(
@@ -207,8 +207,8 @@ void circuit_final(
     const int ADC_LEN = (DATA_LEN * INTERPOLATION_FACTOR) / DECIM_FACTOR;
     static adc_in_t adc_i_in[ADC_LEN], adc_q_in[ADC_LEN];
     for (int i = 0; i < ADC_LEN; ++i) {
-        adc_i_in[i] = adc_in_t(ddc_i_out[i] * adc_in_t(55.0));
-        adc_q_in[i] = adc_in_t(ddc_q_out[i] * adc_in_t(55.0));
+        adc_i_in[i] = adc_in_t(ddc_i_out[i] * adc_in_t(10000.0));
+        adc_q_in[i] = adc_in_t(ddc_q_out[i] * adc_in_t(10000.0));
     }
     dual_adc_system(adc_i_in, adc_q_in, adc_i_out, adc_q_out);
 
@@ -221,7 +221,7 @@ void circuit_final(
     pulse_shape(i_psf_fb_in, q_psf_fb_in, i_psf_fb, q_psf_fb);
 
     // 8. Normalization of feedback PSF to match feedforward PSF RMS
-    double ff_rms = 0, fb_rms = 0;
+    /*double ff_rms = 0, fb_rms = 0;
     for (int i = 0; i < DATA_LEN; ++i) {
         ff_rms += double(i_psf[i]) * double(i_psf[i]);
     }
@@ -236,12 +236,12 @@ void circuit_final(
     for (int i = 0; i < ADC_LEN; ++i) {
         i_psf_fb[i] = fixed_t(double(i_psf_fb[i]) * norm_factor);
         q_psf_fb[i] = fixed_t(double(q_psf_fb[i]) * norm_factor);
-    }
+    }*/
 
 
         // 9. DPD Adaptation (Indirect Learning) -- Only if adapt==true
         if (adapt) {
-            mu = 0.000025; // Learning rate
+            mu = 0.000035; // Learning rate
 
             // FIXED: Indirect learning with CORRECT reference signal
             for (int n = 0; n < DATA_LEN && n < ADC_LEN; ++n) {

@@ -1,7 +1,7 @@
 #include "ap_fixed.h"
 #include "hls_math.h"
 
-#define DATA_LEN 8192
+#define DATA_LEN 512
 #define NUM_WEIGHTS 41
 #define SPS 25
 #define ALPHA 0.5

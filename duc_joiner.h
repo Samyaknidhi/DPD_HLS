@@ -10,7 +10,7 @@
 #define NCO_LUT_SIZE 1024
 #define NCO_LUT_BITS 10
 #define NUM_FILTER_TAPS 63
-#define DATA_LEN 8192
+#define DATA_LEN 512
 
 typedef ap_fixed<24,8> sample_type;
 typedef ap_fixed<24,12> coeff_type;

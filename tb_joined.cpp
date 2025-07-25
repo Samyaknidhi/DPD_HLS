@@ -7,9 +7,9 @@
 #include "pa_joiner.h"
 #include "ddc_joiner.h"
 
-#define MAX_INPUT_BYTES 8192
-#define DATA_LEN 8192
-#define MAX_SYMBOLS 32768
+#define MAX_INPUT_BYTES 512
+#define DATA_LEN 512
+#define MAX_SYMBOLS 2048
 #define INTERPOLATION_FACTOR 8
 #define DECIM_FACTOR 8
 
@@ -114,7 +114,7 @@ int main() {
     pa_out_file.close();
 
     // 2. Run adaptation (DPD learns)
-    for (int adapt_itr = 0; adapt_itr < 850; ++adapt_itr) {
+    for (int adapt_itr = 0; adapt_itr < 10; ++adapt_itr) {
         circuit_final(input_bytes, num_bits, duc_out,
                       i_symbols, q_symbols, i_psf, q_psf,
                       dpd_i, dpd_q, dac_i_arr, dac_q_arr, qm_out_buf,

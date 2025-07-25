@@ -4,7 +4,7 @@
 #include <ap_int.h>
 #include <ap_fixed.h>
 
-#define N 8192
+#define N 512
 #define W 16  // Output bit width
 
 void dual_adc_system(
