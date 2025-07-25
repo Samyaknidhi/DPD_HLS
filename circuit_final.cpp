@@ -74,7 +74,7 @@ void circuit_final(
     // 1. Pulse shaping (feedforward)
     pulse_shape(i_symbols, q_symbols, i_psf, q_psf);
 
-    coef_t mu = adapt ? 0.00000099 : 0.0; // Adaptation only if adapt==true
+    coef_t mu = adapt ? 0.005 : 0.0; // Adaptation only if adapt==true
 
     ap_uint<8> phase_inc = 2;
 
@@ -221,7 +221,7 @@ void circuit_final(
     pulse_shape(i_psf_fb_in, q_psf_fb_in, i_psf_fb, q_psf_fb);
 
     // 8. Normalization of feedback PSF to match feedforward PSF RMS
-    double ff_rms = 0, fb_rms = 0;
+    /*double ff_rms = 0, fb_rms = 0;
     for (int i = 0; i < DATA_LEN; ++i) {
         ff_rms += double(i_psf[i]) * double(i_psf[i]);
     }
@@ -236,65 +236,47 @@ void circuit_final(
     for (int i = 0; i < ADC_LEN; ++i) {
         i_psf_fb[i] = fixed_t(double(i_psf_fb[i]) * norm_factor);
         q_psf_fb[i] = fixed_t(double(q_psf_fb[i]) * norm_factor);
-    }
+    }*/
 
 
+    // In circuit_final.cpp
     if (adapt) {
-            // --- PEAK VALUE NORMALIZATION (CRITICAL FOR STABILITY) ---
-            double max_abs_val = 1e-9;
+        // Set a NEW, LARGER learning rate
+        coef_t mu = 0.005; // Start with a much larger value and tune if needed
 
-            for (int i = 0; i < ADC_LEN; ++i) {
-                double mag = std::sqrt(double(i_psf_fb[i]) * double(i_psf_fb[i]) + double(q_psf_fb[i]) * double(q_psf_fb[i]));
-                if (mag > max_abs_val) {
-                    max_abs_val = mag;
+        for (int n = 0; n < DATA_LEN && n < ADC_LEN; ++n) {
+            #pragma HLS PIPELINE
+            data_t i_in_feedback[MEMORY_DEPTH] = {0};
+            data_t q_in_feedback[MEMORY_DEPTH] = {0};
+
+            for (int m = 0; m < MEMORY_DEPTH; ++m) {
+                int idx = n - m;
+                if (idx >= 0 && idx < ADC_LEN) {
+                    // Use the feedback signal directly
+                    i_in_feedback[m] = data_t(i_psf_fb[idx]);
+                    q_in_feedback[m] = data_t(q_psf_fb[idx]);
                 }
             }
-            for (int i = 0; i < DATA_LEN; ++i) {
-                double mag = std::sqrt(double(dpd_i[i]) * double(dpd_i[i]) + double(dpd_q[i]) * double(dpd_q[i]));
-                if (mag > max_abs_val) {
-                    max_abs_val = mag;
-                }
-            }
 
-            double peak_norm_factor = (max_abs_val > 1e-9) ? (1.0 / max_abs_val) : 1.0;
+            // Get the delayed reference signal directly
+            int ref_idx = (n >= DELAY_OFFSET) ? (n - DELAY_OFFSET) : 0;
+            data_t i_ref_delayed = (ref_idx < DATA_LEN) ? dpd_i[ref_idx] : data_t(0);
+            data_t q_ref_delayed = (ref_idx < DATA_LEN) ? dpd_q[ref_idx] : data_t(0);
 
-            coef_t mu = 0.00000099;
+            data_t z_i, z_q; // DPD output during this step (not used)
 
-            for (int n = 0; n < DATA_LEN && n < ADC_LEN; ++n) {
-                data_t i_in_raw[MEMORY_DEPTH] = {0};
-                data_t q_in_raw[MEMORY_DEPTH] = {0};
-
-                for (int m = 0; m < MEMORY_DEPTH; ++m) {
-                    int idx = n - m;
-                    if (idx >= 0 && idx < ADC_LEN) {
-                        i_in_raw[m] = data_t(i_psf_fb[idx]);
-                        q_in_raw[m] = data_t(q_psf_fb[idx]);
-                    }
-                }
-
-                int ref_idx = (n >= DELAY_OFFSET) ? (n - DELAY_OFFSET) : 0;
-                          data_t i_ref_raw = (ref_idx < DATA_LEN) ? dpd_i[ref_idx] : data_t(0);
-                          data_t q_ref_raw = (ref_idx < DATA_LEN) ? dpd_q[ref_idx] : data_t(0);
-                data_t i_in_norm[MEMORY_DEPTH];
-                data_t q_in_norm[MEMORY_DEPTH];
-                for(int m=0; m<MEMORY_DEPTH; ++m) {
-                    i_in_norm[m] = data_t(double(i_in_raw[m]) * peak_norm_factor);
-                    q_in_norm[m] = data_t(double(q_in_raw[m]) * peak_norm_factor);
-                }
-                data_t i_ref_norm = data_t(double(i_ref_raw) * peak_norm_factor);
-                data_t q_ref_norm = data_t(double(q_ref_raw) * peak_norm_factor);
-
-                data_t z_i, z_q;
-                dpd(i_in_norm, q_in_norm, i_ref_norm, q_ref_norm, w, mu, &z_i, &z_q);
+            // Call DPD with the un-normalized signals
+            dpd(i_in_feedback, q_in_feedback, i_ref_delayed, q_ref_delayed, w, mu, &z_i, &z_q);
 #ifndef __SYNTHESIS__
             // Print error periodically to see convergence
             if (n % (DATA_LEN / 8) == 0) {
-                data_t err_i = i_ref_norm - z_i;
-                data_t err_q = q_ref_norm - z_q;
+                data_t err_i = i_ref_delayed - z_i;
+                data_t err_q = q_ref_delayed - z_q;
                 double err_mag = std::sqrt(err_i.to_double() * err_i.to_double() + err_q.to_double() * err_q.to_double());
                 printf("Adaptation Step [%d/%d]: |Error| = %f\n", n, DATA_LEN, err_mag);
             }
             #endif
+
         }
 
         // ======================================================================
@@ -302,7 +284,6 @@ void circuit_final(
         // ======================================================================
         #ifndef __SYNTHESIS__
         printf("\n--- DPD Weights After Adaptation ---\n");
-        printf("Normalization factor used: %f\n", peak_norm_factor);
         for (int k = 0; k < K; ++k) {
             for (int m = 0; m < MEMORY_DEPTH; ++m) {
                 // Print only the most significant weights to avoid clutter
@@ -317,3 +298,5 @@ void circuit_final(
         #endif
     }
 }
+
+
