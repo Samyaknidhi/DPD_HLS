@@ -13,19 +13,19 @@
 #include "hls_stream.h"
 #include "adc_joiner.h"
 
-#define MAX_INPUT_BYTES 512
-#define DATA_LEN 512
-#define MAX_SYMBOLS 2048
+#define MAX_INPUT_BYTES 8192
+#define DATA_LEN 8192
+#define MAX_SYMBOLS 32768
 #define INTERPOLATION_FACTOR 8
 #define DECIM_FACTOR 8
-#define DELAY_OFFSET 163  // Adjust as needed for your system
+#define DELAY_OFFSET 811 // Adjust as needed for your system
 
 typedef ap_fixed<24,8> fixed_t;
 typedef ap_fixed<24,8> data_t;
 typedef ap_fixed<24,8> sample_type;
 typedef ap_fixed<24,8> baseband_t;
-typedef ap_fixed<24,8> adc_in_t;
-typedef ap_fixed<24,8> adc_out_t;
+typedef ap_fixed<32,16> adc_in_t;
+typedef ap_fixed<32,16> adc_out_t;
 typedef ap_fixed<24,8> data_ty;
 
 void circuit_final(
@@ -63,7 +63,7 @@ void circuit_final(
     // Static DPD weights (persist between calls)
     static ccoef_t w[K][MEMORY_DEPTH] = {0};
     static bool weights_initialized = false;
-    
+
     if (!weights_initialized) {
         for (int m = 0; m < MEMORY_DEPTH; ++m) {
             w[0][m].real = 1.0; // Linear passthrough
@@ -74,7 +74,7 @@ void circuit_final(
     // 1. Pulse shaping (feedforward)
     pulse_shape(i_symbols, q_symbols, i_psf, q_psf);
 
-    coef_t mu = adapt ? 0.000035 : 0.0; // Adaptation only if adapt==true
+    coef_t mu = adapt ? 0.00000099 : 0.0; // Adaptation only if adapt==true
 
     ap_uint<8> phase_inc = 2;
 
@@ -96,7 +96,7 @@ void circuit_final(
         data_t q_ref = q_psf[n];
 
         data_t z_i, z_q;
-        dpd(i_in, q_in, i_ref, q_ref, w, mu, &z_i, &z_q); // Adapt if mu>0
+        dpd(i_in, q_in, data_t(0), data_t(0), w, 0.0, &z_i, &z_q); // Adapt if mu>0
         dpd_i[n] = z_i;
         dpd_q[n] = z_q;
 
@@ -110,7 +110,7 @@ void circuit_final(
         data_t q_mod_fixed = data_t(dac_q) * data_t(1.0/128.0);
 
         data_t cos_lo, sin_lo;
-        nco(nco_phase, phase_inc, cos_lo, sin_lo); 
+        nco(nco_phase, phase_inc, cos_lo, sin_lo);
 
         data_t qm_out = digital_qm(i_mod_fixed, q_mod_fixed, cos_lo, sin_lo);
         qm_out_buf[n] = qm_out;
@@ -141,7 +141,7 @@ void circuit_final(
         );
 
         // FIXED: More reasonable scaling
-        const sample_type DUC_SCALE = sample_type(50.0);  // Adjust based on your PA requirements
+        const sample_type DUC_SCALE = sample_type(1.0);  // Adjust based on your PA requirements
         for (int i = 0; i < DATA_LEN * INTERPOLATION_FACTOR; ++i) {
             duc_out[i] = duc_out[i] * DUC_SCALE;
         }
@@ -174,13 +174,13 @@ void circuit_final(
     // 5. DDC Stage (Feedback path) - COMPLETELY FIXED
     static rf_sample_t ddc_in[DATA_LEN * INTERPOLATION_FACTOR];
     for (int i = 0; i < DATA_LEN * INTERPOLATION_FACTOR; ++i) {
-        ddc_in[i] = rf_sample_t(amp_out_i[i]);
+        ddc_in[i] = rf_sample_t(amp_out_i[i] * data_t(1.0));
     }
 
     ap_uint<32> ddc_freq_word = 0x40000000;  // Same frequency as DUC
 
     // FIXED: Reasonable DDC gain (was 25000, now much smaller)
-    ap_fixed<16,8> ddc_gain = 100.0;  // Reduced by 1000x - will be further scaled in DDC
+    ap_fixed<16,8> ddc_gain = 40.0;  // Reduced by 1000x - will be further scaled in DDC
 
     // DDC automatically handles decimation: 65536 in -> 8192 out
     ddc_demodulator(
@@ -207,8 +207,8 @@ void circuit_final(
     const int ADC_LEN = (DATA_LEN * INTERPOLATION_FACTOR) / DECIM_FACTOR;
     static adc_in_t adc_i_in[ADC_LEN], adc_q_in[ADC_LEN];
     for (int i = 0; i < ADC_LEN; ++i) {
-        adc_i_in[i] = adc_in_t(ddc_i_out[i] * adc_in_t(10000.0));
-        adc_q_in[i] = adc_in_t(ddc_q_out[i] * adc_in_t(10000.0));
+        adc_i_in[i] = adc_in_t(ddc_i_out[i] * adc_in_t(1.0));
+        adc_q_in[i] = adc_in_t(ddc_q_out[i] * adc_in_t(1.0));
     }
     dual_adc_system(adc_i_in, adc_q_in, adc_i_out, adc_q_out);
 
@@ -221,7 +221,7 @@ void circuit_final(
     pulse_shape(i_psf_fb_in, q_psf_fb_in, i_psf_fb, q_psf_fb);
 
     // 8. Normalization of feedback PSF to match feedforward PSF RMS
-    /*double ff_rms = 0, fb_rms = 0;
+    double ff_rms = 0, fb_rms = 0;
     for (int i = 0; i < DATA_LEN; ++i) {
         ff_rms += double(i_psf[i]) * double(i_psf[i]);
     }
@@ -236,65 +236,84 @@ void circuit_final(
     for (int i = 0; i < ADC_LEN; ++i) {
         i_psf_fb[i] = fixed_t(double(i_psf_fb[i]) * norm_factor);
         q_psf_fb[i] = fixed_t(double(q_psf_fb[i]) * norm_factor);
-    }*/
+    }
 
 
-        // 9. DPD Adaptation (Indirect Learning) -- Only if adapt==true
-        if (adapt) {
-            mu = 0.000035; // Learning rate
+    if (adapt) {
+            // --- PEAK VALUE NORMALIZATION (CRITICAL FOR STABILITY) ---
+            double max_abs_val = 1e-9;
 
-            // FIXED: Indirect learning with CORRECT reference signal
+            for (int i = 0; i < ADC_LEN; ++i) {
+                double mag = std::sqrt(double(i_psf_fb[i]) * double(i_psf_fb[i]) + double(q_psf_fb[i]) * double(q_psf_fb[i]));
+                if (mag > max_abs_val) {
+                    max_abs_val = mag;
+                }
+            }
+            for (int i = 0; i < DATA_LEN; ++i) {
+                double mag = std::sqrt(double(dpd_i[i]) * double(dpd_i[i]) + double(dpd_q[i]) * double(dpd_q[i]));
+                if (mag > max_abs_val) {
+                    max_abs_val = mag;
+                }
+            }
+
+            double peak_norm_factor = (max_abs_val > 1e-9) ? (1.0 / max_abs_val) : 1.0;
+
+            coef_t mu = 0.00000099;
+
             for (int n = 0; n < DATA_LEN && n < ADC_LEN; ++n) {
-                data_t i_in[MEMORY_DEPTH] = {0};
-                data_t q_in[MEMORY_DEPTH] = {0};
+                data_t i_in_raw[MEMORY_DEPTH] = {0};
+                data_t q_in_raw[MEMORY_DEPTH] = {0};
 
-                // Use PA output (feedback) as DPD input
                 for (int m = 0; m < MEMORY_DEPTH; ++m) {
                     int idx = n - m;
                     if (idx >= 0 && idx < ADC_LEN) {
-                        i_in[m] = data_t(i_psf_fb[idx]);  // <- PA output (feedback)
-                        q_in[m] = data_t(q_psf_fb[idx]);
-                    } else {
-                        i_in[m] = data_t(0);
-                        q_in[m] = data_t(0);
+                        i_in_raw[m] = data_t(i_psf_fb[idx]);
+                        q_in_raw[m] = data_t(q_psf_fb[idx]);
                     }
                 }
 
-                // CRITICAL FIX: Reference = PA INPUT (DPD output), NOT PSF input!
                 int ref_idx = (n >= DELAY_OFFSET) ? (n - DELAY_OFFSET) : 0;
-
-                // Use PA input = DPD output from transmit path (CORRECT!)
-                data_t i_ref = (ref_idx < DATA_LEN) ? dpd_i[ref_idx] : data_t(0);  // <- PA input!
-                data_t q_ref = (ref_idx < DATA_LEN) ? dpd_q[ref_idx] : data_t(0);  // <- PA input!
+                          data_t i_ref_raw = (ref_idx < DATA_LEN) ? dpd_i[ref_idx] : data_t(0);
+                          data_t q_ref_raw = (ref_idx < DATA_LEN) ? dpd_q[ref_idx] : data_t(0);
+                data_t i_in_norm[MEMORY_DEPTH];
+                data_t q_in_norm[MEMORY_DEPTH];
+                for(int m=0; m<MEMORY_DEPTH; ++m) {
+                    i_in_norm[m] = data_t(double(i_in_raw[m]) * peak_norm_factor);
+                    q_in_norm[m] = data_t(double(q_in_raw[m]) * peak_norm_factor);
+                }
+                data_t i_ref_norm = data_t(double(i_ref_raw) * peak_norm_factor);
+                data_t q_ref_norm = data_t(double(q_ref_raw) * peak_norm_factor);
 
                 data_t z_i, z_q;
-
-                // Train: DPD(PA_output) -> PA_input (CORRECT indirect learning!)
-                dpd(i_in, q_in, i_ref, q_ref, w, mu, &z_i, &z_q);
-
-                // Debug the CORRECT adaptation
-                #ifndef __SYNTHESIS__
-                if (n < 5) {
-                    printf("DPD_ADAPT[%d]: PA_output_in=(%f,%f), PA_input_ref=(%f,%f), DPD_out=(%f,%f)\n",
-                           n, i_in[0].to_double(), q_in[0].to_double(),
-                           i_ref.to_double(), q_ref.to_double(),
-                           z_i.to_double(), z_q.to_double());
-
-                    data_t err_i = i_ref - z_i;
-                    data_t err_q = q_ref - z_q;
-                    printf("DPD_ADAPT[%d]: Error=(%f,%f), |Error|=%f\n",
-                           n, err_i.to_double(), err_q.to_double(),
-                           std::sqrt(err_i.to_double()*err_i.to_double() + err_q.to_double()*err_q.to_double()));
-                }
-                #endif
-            }
-
-            // Debug weight evolution after adaptation
-            #ifndef __SYNTHESIS__
-            printf("DPD Weights after adaptation:\n");
-            for (int k = 0; k < K && k < 3; ++k) {
-                printf("  Weight[%d][0]: %f + j%f\n", k, w[k][0].real.to_double(), w[k][0].imag.to_double());
+                dpd(i_in_norm, q_in_norm, i_ref_norm, q_ref_norm, w, mu, &z_i, &z_q);
+#ifndef __SYNTHESIS__
+            // Print error periodically to see convergence
+            if (n % (DATA_LEN / 8) == 0) {
+                data_t err_i = i_ref_norm - z_i;
+                data_t err_q = q_ref_norm - z_q;
+                double err_mag = std::sqrt(err_i.to_double() * err_i.to_double() + err_q.to_double() * err_q.to_double());
+                printf("Adaptation Step [%d/%d]: |Error| = %f\n", n, DATA_LEN, err_mag);
             }
             #endif
         }
+
+        // ======================================================================
+        // >>>>>>>>>> ADDED DEBUG PRINTS <<<<<<<<<<
+        // ======================================================================
+        #ifndef __SYNTHESIS__
+        printf("\n--- DPD Weights After Adaptation ---\n");
+        printf("Normalization factor used: %f\n", peak_norm_factor);
+        for (int k = 0; k < K; ++k) {
+            for (int m = 0; m < MEMORY_DEPTH; ++m) {
+                // Print only the most significant weights to avoid clutter
+                if (k < 4 && m < 2) {
+                    printf("  w[%d][%d]: %s%f + j*(%s%f)\n", k, m,
+                        (w[k][m].real < 0 ? "" : " "), w[k][m].real.to_double(),
+                        (w[k][m].imag < 0 ? "" : " "), w[k][m].imag.to_double());
+                }
+            }
+        }
+        printf("------------------------------------\n\n");
+        #endif
+    }
 }
