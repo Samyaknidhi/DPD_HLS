@@ -1,40 +1,53 @@
-#ifndef DPD_2_H
-#define DPD_2_H
+#ifndef DPD_JOINER_H
+#define DPD_JOINER_H
 
 #include "ap_fixed.h"
 
-// CHANGE THIS: Reduce model complexity
-#define K 13 // Nonlinearity order
+// --- Model Parameters ---
+#define K 5             // Nonlinearity order
+#define MEMORY_DEPTH 2  // Number of memory taps
 
-#ifndef MEMORY_DEPTH
-#define MEMORY_DEPTH 12  // Increased from 5 to handle the significant delay
-#endif
+// --- Fixed-Point Type Definitions (CORRECTED FOR STABILITY) ---
 
-// Data types for DPD system
-typedef ap_fixed<24,8> data_t;    // Input/output data type (I/Q)
-typedef ap_fixed<24,8> coef_t;    // Coefficient type for LMS
-typedef ap_fixed<24,6> phi_t;     // Basis function output type
-typedef ap_fixed<32,8> acc_t;     // Accumulator type for MAC
+// Input/output data type (I/Q) for the DPD module
+typedef ap_fixed<24, 8> data_t;
 
-// Complex coefficient struct
+// Basis function output type (|z|^2). Must hold i*i + q*q.
+// The integer part must be >= I(data_t)*2. Here, 8*2=16.
+typedef ap_fixed<32, 16> phi_t;
+
+// Coefficient type for the filter weights (w) and step-size (mu)
+typedef ap_fixed<32, 2> coef_t;
+
+// Accumulator for the MAC operation (sum(w*phi)).
+// Integer part must be >= I(w) + I(phi) + log2(K*M).
+// 2 + 16 + log2(21) ~ 18 + 5 = 23. We use 24 for safety.
+typedef ap_fixed<48, 24> acc_t;
+
+// CRITICAL FIX: Intermediate type for the weight update calculation (err * phi).
+// This was the source of a major overflow bug.
+// Integer part must be >= I(err) + I(phi) = I(data_t) + I(phi) = 8 + 16 = 24.
+typedef ap_fixed<48, 24> update_t;
+
+
+// --- Complex Coefficient Struct ---
 typedef struct {
     coef_t real;
     coef_t imag;
 } ccoef_t;
 
-// DPD function prototype (matches new dpd.cpp interface)
-// Memory-based DPD function prototype
+
+// --- Function Prototype ---
+// The function name from your dpd_join.cpp is dpd(), not dpd_join()
 void dpd(
-    const data_t i_in[MEMORY_DEPTH], const data_t q_in[MEMORY_DEPTH],
-    data_t i_ref, data_t q_ref,
-    ccoef_t w[K][MEMORY_DEPTH], coef_t mu,
-    data_t* z_i, data_t* z_q
+    const data_t i_in[MEMORY_DEPTH],
+    const data_t q_in[MEMORY_DEPTH],
+    data_t i_ref,
+    data_t q_ref,
+    ccoef_t w[K][MEMORY_DEPTH],
+    coef_t mu,
+    data_t *i_out,
+    data_t *q_out
 );
 
-// Basis function computation
-void compute_phi_all(
-    data_t i, data_t q,
-    phi_t real_phi[K], phi_t imag_phi[K]
-);
-
-#endif // DPD_2_H
+#endif // DPD_JOINER_H

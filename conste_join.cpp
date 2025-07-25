@@ -5,8 +5,8 @@
 typedef ap_fixed<24,8> fixed_point_t;
 
 // Define maximum sizes
-#define MAX_INPUT_BYTES 512
-#define MAX_SYMBOLS 2048
+#define MAX_INPUT_BYTES 8192
+#define MAX_SYMBOLS 32768
 
 // Rest of your conste function remains the same...
 void conste(

@@ -1,7 +1,7 @@
 #include "ap_fixed.h"
 #include "hls_math.h"
 
-#define DATA_LEN 512
+#define DATA_LEN 8192
 #define NUM_WEIGHTS 41
 #define SPS 25
 #define ALPHA 0.5
@@ -21,14 +21,14 @@ void raised_cosine_filter(fixed_t rc[NUM_WEIGHTS]) {
     for (int i = 0; i < NUM_WEIGHTS; i++) {
 #pragma HLS PIPELINE II=1  // <- Add this for performance
         fixed_t idx = fixed_t(i - mid);
-        fixed_t x = SCALE * idx / fixed_t(SPS);
+        fixed_t x = (SCALE * idx) * fixed_t(1.0/SPS);
         fixed_t pi_x = PI * x;
 
         fixed_t sinc;
         if (hls::abs(x) < EPS_X)
             sinc = fixed_t(1.0);
         else
-            sinc = hls::sin(pi_x) / pi_x;
+            sinc = hls::sin(pi_x) * (1/pi_x);
 
         fixed_t denom = fixed_t(1.0) - fixed_t(4.0) * ALPHA_FIXED * ALPHA_FIXED * x * x;
 
@@ -58,7 +58,7 @@ void raised_cosine_filter(fixed_t rc[NUM_WEIGHTS]) {
 
     for (int i = 0; i < NUM_WEIGHTS; i++) {
 #pragma HLS PIPELINE II=1
-        rc[i] = rc[i] / max_abs;
+        rc[i] = rc[i] * fixed_t(1/max_abs);
     }
 }
 

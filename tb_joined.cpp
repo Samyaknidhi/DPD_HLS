@@ -7,9 +7,9 @@
 #include "pa_joiner.h"
 #include "ddc_joiner.h"
 
-#define MAX_INPUT_BYTES 512
-#define DATA_LEN 512
-#define MAX_SYMBOLS 2048
+#define MAX_INPUT_BYTES 8192
+#define DATA_LEN 8192
+#define MAX_SYMBOLS 32768
 #define INTERPOLATION_FACTOR 8
 #define DECIM_FACTOR 8
 
@@ -17,7 +17,7 @@ typedef ap_fixed<24,8> fixed_t;
 typedef ap_fixed<24,8> data_t;
 typedef ap_fixed<24,8> sample_type;
 typedef ap_fixed<24,8> baseband_t;
-typedef ap_fixed<24,8> adc_out_t;
+typedef ap_fixed<32,16> adc_out_t;
 typedef ap_fixed<24,8> data_ty;
 
 // Add adapt parameter to circuit_final prototype
@@ -80,8 +80,8 @@ int main() {
     static fixed_t q_psf_fb[(DATA_LEN * INTERPOLATION_FACTOR) / DECIM_FACTOR] = {0};
 
     // ---- Read I/Q symbols from files ----
-    std::ifstream i_file("C:/Users/Samyak_Nidhi/Downloads/i_symbols.txt");
-    std::ifstream q_file("C:/Users/Samyak_Nidhi/Downloads/q_symbols.txt");
+    std::ifstream i_file("C:/Users/Samyak_Nidhi/Desktop/predistortion/references/i_symbols.txt");
+    std::ifstream q_file("C:/Users/Samyak_Nidhi/Desktop/predistortion/references/q_symbols.txt");
     if (!i_file || !q_file) {
         std::cerr << "Cannot open i_symbols.txt or q_symbols.txt\n";
         return 1;
@@ -89,22 +89,17 @@ int main() {
     double val;
     for (int i = 0; i < DATA_LEN; ++i) {
         if (!(i_file >> val)) { std::cerr << "Not enough data in i_symbols.txt\n"; return 1; }
-        i_symbols[i] = fixed_t(val) * fixed_t(0.025);
+        i_symbols[i] = fixed_t(val) * fixed_t(1.0);
         if (!(q_file >> val)) { std::cerr << "Not enough data in q_symbols.txt\n"; return 1; }
-        q_symbols[i] = fixed_t(val) * fixed_t(0.025);
+        q_symbols[i] = fixed_t(val) * fixed_t(1.0);
     }
     i_file.close();
     q_file.close();
 
     // 1. Run baseline (no DPD adaptation, DPD is passthrough)
-    circuit_final(input_bytes, num_bits, duc_out,
-                  i_symbols, q_symbols, i_psf, q_psf,
-                  dpd_i, dpd_q, dac_i_arr, dac_q_arr, qm_out_buf,
-                  amp_out_i, amp_out_q, amp_magnitude, amp_gain_lin, amp_gain_db,
-                  ddc_i_out, ddc_q_out,
-                  adc_i_out, adc_q_out,
-                  i_psf_fb, q_psf_fb,
-                  false); // adapt = false
+    std::cout << "--- Running Baseline (DPD passthrough) ---\n";
+        circuit_final(input_bytes, num_bits, duc_out, i_symbols, q_symbols, i_psf, q_psf, dpd_i, dpd_q, dac_i_arr, dac_q_arr, qm_out_buf, amp_out_i, amp_out_q, amp_magnitude, amp_gain_lin, amp_gain_db, ddc_i_out, ddc_q_out, adc_i_out, adc_q_out, i_psf_fb, q_psf_fb, false);
+
 
     // Save PA output (no DPD)
     std::ofstream pa_out_file("output_pa.txt");
@@ -113,17 +108,12 @@ int main() {
     }
     pa_out_file.close();
 
-    // 2. Run adaptation (DPD learns)
-    for (int adapt_itr = 0; adapt_itr < 10; ++adapt_itr) {
-        circuit_final(input_bytes, num_bits, duc_out,
-                      i_symbols, q_symbols, i_psf, q_psf,
-                      dpd_i, dpd_q, dac_i_arr, dac_q_arr, qm_out_buf,
-                      amp_out_i, amp_out_q, amp_magnitude, amp_gain_lin, amp_gain_db,
-                      ddc_i_out, ddc_q_out,
-                      adc_i_out, adc_q_out,
-                      i_psf_fb, q_psf_fb,
-                      true); // adapt = true
-    }
+    int adaptation_iterations = 25; // Run 5 times to ensure convergence
+        std::cout << "\n--- Running DPD Adaptation (" << adaptation_iterations << " iterations) ---\n";
+        for (int i = 0; i < adaptation_iterations; ++i) {
+            std::cout << "Adaptation Iteration " << i + 1 << "/" << adaptation_iterations << std::endl;
+            circuit_final(input_bytes, num_bits, duc_out, i_symbols, q_symbols, i_psf, q_psf, dpd_i, dpd_q, dac_i_arr, dac_q_arr, qm_out_buf, amp_out_i, amp_out_q, amp_magnitude, amp_gain_lin, amp_gain_db, ddc_i_out, ddc_q_out, adc_i_out, adc_q_out, i_psf_fb, q_psf_fb, true);
+        }
 
     // 3. Run transmit chain again with learned DPD (no further adaptation)
     circuit_final(input_bytes, num_bits, duc_out,

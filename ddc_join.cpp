@@ -1,4 +1,4 @@
- #include "ap_int.h"
+#include "ap_int.h"
 #include <ap_fixed.h>
 #include "hls_stream.h"
 #include "hls_math.h"
@@ -86,8 +86,6 @@ void ddc_demodulator(
     // Calculate expected output samples
     const int expected_outputs = num_samples / DECIM_FACTOR;
 
-    // FIXED: Reasonable scaling - your gain is way too high!
-    const filter_accum_t REASONABLE_GAIN = filter_accum_t(gain.to_float() / 1000.0f); // Scale down by 1000x
 
     // Main processing loop
     for (int n = 0; n < num_samples; n++) {
@@ -157,8 +155,8 @@ void ddc_demodulator(
 
             // FIXED: Apply reasonable gain scaling and bounds check
             if (out_sample_idx < expected_outputs) {
-                i_out[out_sample_idx] = i_acc * REASONABLE_GAIN;
-                q_out[out_sample_idx] = q_acc * REASONABLE_GAIN;
+                i_out[out_sample_idx] = i_acc * filter_accum_t(gain);
+                q_out[out_sample_idx] = q_acc * filter_accum_t(gain);
 
                 if (out_sample_idx < 5) {
                     std::cout << "[out_sample_idx=" << out_sample_idx << "] final i_out = "
@@ -178,6 +176,6 @@ void ddc_demodulator(
     #ifndef __SYNTHESIS__
     std::cout << "DDC: Processed " << num_samples << " input samples, generated "
               << out_sample_idx << " output samples (expected " << expected_outputs << ")" << std::endl;
-    std::cout << "DDC: Applied gain scaling factor: " << REASONABLE_GAIN.to_double() << std::endl;
+    std::cout << "DDC: Applied gain scaling factor: " << gain.to_double() << std::endl;
     #endif
 }

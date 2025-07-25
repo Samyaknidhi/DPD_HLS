@@ -74,7 +74,7 @@ void circuit_final(
     // 1. Pulse shaping (feedforward)
     pulse_shape(i_symbols, q_symbols, i_psf, q_psf);
 
-    coef_t mu = adapt ? 0.005 : 0.0; // Adaptation only if adapt==true
+    coef_t mu = adapt ? 0.0005 : 0.0; // Adaptation only if adapt==true
 
     ap_uint<8> phase_inc = 2;
 
@@ -180,7 +180,7 @@ void circuit_final(
     ap_uint<32> ddc_freq_word = 0x40000000;  // Same frequency as DUC
 
     // FIXED: Reasonable DDC gain (was 25000, now much smaller)
-    ap_fixed<16,8> ddc_gain = 40.0;  // Reduced by 1000x - will be further scaled in DDC
+    ap_fixed<16,8> ddc_gain = 0.4;  // Reduced by 1000x - will be further scaled in DDC
 
     // DDC automatically handles decimation: 65536 in -> 8192 out
     ddc_demodulator(
@@ -242,7 +242,7 @@ void circuit_final(
     // In circuit_final.cpp
     if (adapt) {
         // Set a NEW, LARGER learning rate
-        coef_t mu = 0.005; // Start with a much larger value and tune if needed
+        coef_t mu = 0.0005; // Start with a much larger value and tune if needed
 
         for (int n = 0; n < DATA_LEN && n < ADC_LEN; ++n) {
             #pragma HLS PIPELINE
