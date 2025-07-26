@@ -18,7 +18,7 @@
 #define MAX_SYMBOLS 32768
 #define INTERPOLATION_FACTOR 8
 #define DECIM_FACTOR 8
-#define DELAY_OFFSET 811 // Adjust as needed for your system
+#define DELAY_OFFSET 669 // Adjust as needed for your system
 
 typedef ap_fixed<24,8> fixed_t;
 typedef ap_fixed<24,8> data_t;
@@ -74,7 +74,7 @@ void circuit_final(
     // 1. Pulse shaping (feedforward)
     pulse_shape(i_symbols, q_symbols, i_psf, q_psf);
 
-    coef_t mu = adapt ? 0.0005 : 0.0; // Adaptation only if adapt==true
+    coef_t mu = adapt ? 0.00001 : 0.0; // Adaptation only if adapt==true
 
     ap_uint<8> phase_inc = 2;
 
@@ -106,8 +106,8 @@ void circuit_final(
         dac_i_arr[n] = dac_i;
         dac_q_arr[n] = dac_q;
 
-        data_t i_mod_fixed = data_t(dac_i) * data_t(1.0/128.0);
-        data_t q_mod_fixed = data_t(dac_q) * data_t(1.0/128.0);
+        data_t i_mod_fixed = data_t(dac_i) * data_t(1.0/64.0);
+        data_t q_mod_fixed = data_t(dac_q) * data_t(1.0/64.0);
 
         data_t cos_lo, sin_lo;
         nco(nco_phase, phase_inc, cos_lo, sin_lo);
@@ -180,7 +180,7 @@ void circuit_final(
     ap_uint<32> ddc_freq_word = 0x40000000;  // Same frequency as DUC
 
     // FIXED: Reasonable DDC gain (was 25000, now much smaller)
-    ap_fixed<16,8> ddc_gain = 0.4;  // Reduced by 1000x - will be further scaled in DDC
+    ap_fixed<16,8> ddc_gain = 0.05;  // Reduced by 1000x - will be further scaled in DDC
 
     // DDC automatically handles decimation: 65536 in -> 8192 out
     ddc_demodulator(
@@ -239,46 +239,69 @@ void circuit_final(
     }*/
 
 
-    // In circuit_final.cpp
-    if (adapt) {
-        // Set a NEW, LARGER learning rate
-        coef_t mu = 0.0005; // Start with a much larger value and tune if needed
 
-        for (int n = 0; n < DATA_LEN && n < ADC_LEN; ++n) {
-            #pragma HLS PIPELINE
-            data_t i_in_feedback[MEMORY_DEPTH] = {0};
-            data_t q_in_feedback[MEMORY_DEPTH] = {0};
 
-            for (int m = 0; m < MEMORY_DEPTH; ++m) {
-                int idx = n - m;
-                if (idx >= 0 && idx < ADC_LEN) {
-                    // Use the feedback signal directly
-                    i_in_feedback[m] = data_t(i_psf_fb[idx]);
-                    q_in_feedback[m] = data_t(q_psf_fb[idx]);
-                }
-            }
+    	// In circuit_final.cpp
 
-            // Get the delayed reference signal directly
-            int ref_idx = (n >= DELAY_OFFSET) ? (n - DELAY_OFFSET) : 0;
-            data_t i_ref_delayed = (ref_idx < DATA_LEN) ? dpd_i[ref_idx] : data_t(0);
-            data_t q_ref_delayed = (ref_idx < DATA_LEN) ? dpd_q[ref_idx] : data_t(0);
+    	if (adapt) {
+    	    // 1. Find the peak absolute value from the feedback signal buffer.
+    	    // This is used to scale the training signals to the [-1, 1] range
+    	    // to prevent numerical instability in the polynomial calculations.
+    	    data_t max_abs_val = 1e-9;
+    	    for (int i = 0; i < ADC_LEN; i++) {
+    	        #pragma HLS PIPELINE
+    	        // Use hls::abs for proper synthesis with ap_fixed types
+    	        data_t i_abs = std::abs(float(i_psf_fb[i]));
+    	        data_t q_abs = std::abs(float(q_psf_fb[i]));
+    	        if (i_abs > max_abs_val) max_abs_val = i_abs;
+    	        if (q_abs > max_abs_val) max_abs_val = q_abs;
+    	    }
 
-            data_t z_i, z_q; // DPD output during this step (not used)
+    	    // 2. Calculate the normalization factor using higher precision.
+    	    data_t norm_factor = data_t(data_t(1.0) / max_abs_val);
 
-            // Call DPD with the un-normalized signals
-            dpd(i_in_feedback, q_in_feedback, i_ref_delayed, q_ref_delayed, w, mu, &z_i, &z_q);
-#ifndef __SYNTHESIS__
-            // Print error periodically to see convergence
-            if (n % (DATA_LEN / 8) == 0) {
-                data_t err_i = i_ref_delayed - z_i;
-                data_t err_q = q_ref_delayed - z_q;
-                double err_mag = std::sqrt(err_i.to_double() * err_i.to_double() + err_q.to_double() * err_q.to_double());
-                printf("Adaptation Step [%d/%d]: |Error| = %f\n", n, DATA_LEN, err_mag);
-            }
-            #endif
+    	    // 3. Use a confident, larger learning rate now that signals are stable.
+    	    coef_t mu = 0.00001;
 
-        }
+    	    // 4. Main adaptation loop
+    	    for (int n = 0; n < DATA_LEN; ++n) {
+    	        #pragma HLS PIPELINE
+    	        data_t i_in_feedback[MEMORY_DEPTH] = {0};
+    	        data_t q_in_feedback[MEMORY_DEPTH] = {0};
 
+    	        // Build the training input vector and apply normalization
+    	        for (int m = 0; m < MEMORY_DEPTH; ++m) {
+    	            int idx = n - m;
+    	            if (idx >= 0 && idx < ADC_LEN) {
+    	                i_in_feedback[m] = data_t(i_psf_fb[idx]) * norm_factor;
+    	                q_in_feedback[m] = data_t(q_psf_fb[idx]) * norm_factor;
+    	            }
+    	        }
+
+    	        // Get the delayed reference and apply the SAME normalization
+    	        int ref_idx = (n >= DELAY_OFFSET) ? (n - DELAY_OFFSET) : 0;
+    	        data_t i_ref_delayed = (ref_idx < DATA_LEN) ? dpd_i[ref_idx] : data_t(0);
+    	        data_t q_ref_delayed = (ref_idx < DATA_LEN) ? dpd_q[ref_idx] : data_t(0);
+    	        data_t i_ref_norm = i_ref_delayed * norm_factor;
+    	        data_t q_ref_norm = q_ref_delayed * norm_factor;
+
+    	        data_t z_i, z_q; // DPD output
+
+    	        // Call DPD to update weights using normalized signals
+    	        dpd(i_in_feedback, q_in_feedback, i_ref_norm, q_ref_norm, w, mu, &z_i, &z_q);
+
+    	        #ifndef __SYNTHESIS__
+    	        // Print error periodically to see convergence
+    	        if (n % (DATA_LEN / 8) == 0) {
+    	            // CORRECTED: Calculate error using the SAME normalized signals
+    	            // that the DPD function used.
+    	            data_t err_i = i_ref_norm - z_i;
+    	            data_t err_q = q_ref_norm - z_q;
+    	            double err_mag = std::sqrt(err_i.to_double() * err_i.to_double() + err_q.to_double() * err_q.to_double());
+    	            printf("Adaptation Step [%d/%d]: |Normalized Error| = %f\n", n, DATA_LEN, err_mag);
+    	        }
+    	        #endif
+    	    }
         // ======================================================================
         // >>>>>>>>>> ADDED DEBUG PRINTS <<<<<<<<<<
         // ======================================================================
@@ -298,5 +321,8 @@ void circuit_final(
         #endif
     }
 }
+
+
+
 
 

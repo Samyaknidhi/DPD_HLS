@@ -63,7 +63,7 @@ void polyphase_interpolate(
             #pragma HLS PIPELINE
             acc += shift_reg[i] * FILTER_COEFFS[i];
         }
-        output_samples[phase] = sample_type(acc);
+        output_samples[phase] = sample_type(acc) * INTERPOLATION_FACTOR;
     }
 }
 

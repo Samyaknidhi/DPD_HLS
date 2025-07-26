@@ -7,7 +7,7 @@ typedef ap_fixed<24,8> data_ty;
 void dac_multibit_with_select(data_ty din, ap_fixed<24,8> &dout, bool channel_select) {
 #pragma HLS INLINE
     // Scale input from [-1, 1) to [-128, 127]
-    data_ty quantized = din * data_ty(128);
+    data_ty quantized = din * data_ty(64.0);
     if (quantized > 127) quantized = 127;
     if (quantized < -128) quantized = -128;
     dout = ap_fixed<24,8>(quantized);
