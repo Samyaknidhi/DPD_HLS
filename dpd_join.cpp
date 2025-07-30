@@ -11,7 +11,11 @@
 		if (k == 0) return P0;
 		if (k == 1) return P1;
 		for (int n = 2; n <= k; n++) {
-			Pk = ((2*n-1)*(x-1)*P1 - (n-1)*P0) * (1/n);
+			// AFTER (Correct and HLS-Friendly)
+			coef_t one = 1.0;
+			coef_t reciprocal_n = one / n; // HLS can handle this division by a loop integer
+			                               // more safely when types are explicit.
+			Pk = ((2*n-1)*(x-1)*P1 - (n-1)*P0) * reciprocal_n;
 			P0 = P1;
 			P1 = Pk;
 		}

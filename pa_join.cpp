@@ -12,10 +12,10 @@ void saleh_amplifier(
     data_t& gain_db
 ) {
     // More aggressive PA parameters for visible distortion
-    const float alpha_a = 2.5;   // Amplitude coefficient
-    const float beta_a = 1.8;    // Creates compression at lower levels
-    const float alpha_p = 0.8;   // Phase coefficient
-    const float beta_p = 1.2;    // Creates more AM-PM distortion
+    const float alpha_a = 2.1;   // Amplitude coefficient
+    const float beta_a = 3.0;    // Creates compression at lower levels
+    const float alpha_p = 1.0;   // Phase coefficient
+    const float beta_p = 3.5;    // Creates more AM-PM distortion
 
     // Get RF signal magnitude (in_q is always 0 from your circuit_final)
     float rf_magnitude = std::abs(in_i.to_float());
