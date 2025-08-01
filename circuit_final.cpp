@@ -161,19 +161,19 @@ void circuit_final(
         dpd_i[n] = z_i;
         dpd_q[n] = z_q;
 
-        data_ty dac_i, dac_q;
-        dac_multibit_with_select(z_i, dac_i, 0);
-        dac_multibit_with_select(z_q, dac_q, 1);
-        dac_i_arr[n] = dac_i;
-        dac_q_arr[n] = dac_q;
+        //data_ty dac_i, dac_q;
+        //dac_multibit_with_select(z_i, dac_i, 0);
+        //dac_multibit_with_select(z_q, dac_q, 1);
+        //dac_i_arr[n] = dac_i;
+        //dac_q_arr[n] = dac_q;
 
-        data_t i_mod_fixed = data_t(dac_i);
-        data_t q_mod_fixed = data_t(dac_q);
+        //data_t i_mod_fixed = data_t(dac_i);
+        //data_t q_mod_fixed = data_t(dac_q);
 
         data_t cos_lo, sin_lo;
         nco(nco_phase, phase_inc, cos_lo, sin_lo);
 
-        data_t qm_out = digital_qm(i_mod_fixed, q_mod_fixed, cos_lo, sin_lo);
+        data_t qm_out = digital_qm(z_i, z_q, cos_lo, sin_lo);
         qm_out_buf[n] = qm_out;
     }
 
@@ -327,20 +327,20 @@ void circuit_final(
                 }
             }
 
-    // 6. ADC Stage (Final Output)
+   /* // 6. ADC Stage (Final Output)
     //const int ADC_LEN = (DATA_LEN * INTERPOLATION_FACTOR) / DECIM_FACTOR;
     static adc_in_t adc_i_in[ADC_LEN], adc_q_in[ADC_LEN];
     for (int i = 0; i < ADC_LEN; ++i) {
         adc_i_in[i] = adc_in_t(ddc_i_out[i] * adc_in_t(1.0));
         adc_q_in[i] = adc_in_t(ddc_q_out[i] * adc_in_t(1.0));
     }
-    dual_adc_system(adc_i_in, adc_q_in, adc_i_out, adc_q_out);
+    dual_adc_system(adc_i_in, adc_q_in, adc_i_out, adc_q_out);*/
 
     // 7. PSF after ADC (Feedback path)
     static fixed_t i_psf_fb_in[ADC_LEN], q_psf_fb_in[ADC_LEN];
     for (int i = 0; i < ADC_LEN; ++i) {
-        i_psf_fb_in[i] = fixed_t(adc_i_out[i]);
-        q_psf_fb_in[i] = fixed_t(adc_q_out[i]);
+        i_psf_fb_in[i] = fixed_t(ddc_i_out[i]);
+        q_psf_fb_in[i] = fixed_t(ddc_q_out[i]);
     }
     pulse_shape(i_psf_fb_in, q_psf_fb_in, i_psf_fb, q_psf_fb);
 
