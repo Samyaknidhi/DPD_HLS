@@ -45,7 +45,6 @@ void circuit_final(
     adc_out_t adc_q_out[(DATA_LEN * INTERPOLATION_FACTOR) / DECIM_FACTOR],
     fixed_t i_psf_fb[(DATA_LEN * INTERPOLATION_FACTOR) / DECIM_FACTOR],
     fixed_t q_psf_fb[(DATA_LEN * INTERPOLATION_FACTOR) / DECIM_FACTOR],
-	ccoef_t w[K][MEMORY_DEPTH],
     bool adapt //
 );
 
@@ -79,22 +78,10 @@ int main() {
 
     static fixed_t i_psf_fb[(DATA_LEN * INTERPOLATION_FACTOR) / DECIM_FACTOR] = {0};
     static fixed_t q_psf_fb[(DATA_LEN * INTERPOLATION_FACTOR) / DECIM_FACTOR] = {0};
-    static ccoef_t dpd_weights[K][MEMORY_DEPTH];
-    for (int k = 0; k < K; ++k) {
-            for (int m = 0; m < MEMORY_DEPTH; ++m) {
-                if (k == 0) {
-                    dpd_weights[k][m].real = 1.0;
-                    dpd_weights[k][m].imag = 0.0;
-                } else {
-                    dpd_weights[k][m].real = 0.0;
-                    dpd_weights[k][m].imag = 0.0;
-                }
-            }
-        }
 
     // ---- Read I/Q symbols from files ----
-    std::ifstream i_file("C:/Users/Samyak_Nidhi/i_symbols.txt");
-    std::ifstream q_file("C:/Users/Samyak_Nidhi/q_symbols.txt");
+    std::ifstream i_file("C:/Users/Samyak_Nidhi/Downloads/i_symbols.txt");
+    std::ifstream q_file("C:/Users/Samyak_Nidhi/Downloads/q_symbols.txt");
     if (!i_file || !q_file) {
         std::cerr << "Cannot open i_symbols.txt or q_symbols.txt\n";
         return 1;
@@ -117,30 +104,17 @@ int main() {
                   ddc_i_out, ddc_q_out,
                   adc_i_out, adc_q_out,
                   i_psf_fb, q_psf_fb,
-				  dpd_weights,
                   false); // adapt = false
 
     // Save PA output (no DPD)
-    std::ofstream pa_out_i_file("output_pa_i_no_dpd.txt");
-    std::ofstream pa_out_q_file("output_pa_q_no_dpd.txt");
+    std::ofstream pa_out_file("output_pa.txt");
     for (int i = 0; i < DATA_LEN * INTERPOLATION_FACTOR; ++i) {
-        pa_out_i_file << amp_out_i[i].to_double() << "\n";
-        pa_out_q_file << amp_out_q[i].to_double() << "\n";
+        pa_out_file << amp_out_i[i].to_double() << "\n";
     }
-    pa_out_i_file.close();
-    pa_out_q_file.close();
-    std::ofstream dpd_i_no_dpd_file("output_dpd_i_no_dpd.txt");
-    std::ofstream dpd_q_no_dpd_file("output_dpd_q_no_dpd.txt");
-    for (int i = 0; i < DATA_LEN; ++i) {
-        dpd_i_no_dpd_file << dpd_i[i].to_double() << "\n";
-        dpd_q_no_dpd_file << dpd_q[i].to_double() << "\n";
-    }
-    dpd_i_no_dpd_file.close();
-    dpd_q_no_dpd_file.close();
+    pa_out_file.close();
 
     // 2. Run adaptation (DPD learns)
-    for (int adapt_itr = 0; adapt_itr < 10; ++adapt_itr) {
-    	printf("iteration number %d", adapt_itr);
+    for (int adapt_itr = 0; adapt_itr < 25; ++adapt_itr) {
         circuit_final(input_bytes, num_bits, duc_out,
                       i_symbols, q_symbols, i_psf, q_psf,
                       dpd_i, dpd_q, dac_i_arr, dac_q_arr, qm_out_buf,
@@ -148,7 +122,6 @@ int main() {
                       ddc_i_out, ddc_q_out,
                       adc_i_out, adc_q_out,
                       i_psf_fb, q_psf_fb,
-					  dpd_weights,
                       true); // adapt = true
     }
 
@@ -160,19 +133,14 @@ int main() {
                   ddc_i_out, ddc_q_out,
                   adc_i_out, adc_q_out,
                   i_psf_fb, q_psf_fb,
-				  dpd_weights,
                   false); // adapt = false
 
-
-    // Save PA output (with DPD) - Complex
-    std::ofstream pa_out_i_dpd_file("output_pa_i_with_dpd.txt");
-    std::ofstream pa_out_q_dpd_file("output_pa_q_with_dpd.txt");
+    // Save PA output (with DPD)
+    std::ofstream pa_out_dpd_file("output_pa_with_dpd.txt");
     for (int i = 0; i < DATA_LEN * INTERPOLATION_FACTOR; ++i) {
-        pa_out_i_dpd_file << amp_out_i[i].to_double() << "\n";
-        pa_out_q_dpd_file << amp_out_q[i].to_double() << "\n";
+        pa_out_dpd_file << amp_out_i[i].to_double() << "\n";
     }
-    pa_out_i_dpd_file.close();
-    pa_out_q_dpd_file.close();
+    pa_out_dpd_file.close();
 
     // Write outputs to files for each stage (unchanged)
     std::ofstream f_conste_i("output_conste_i.txt");
