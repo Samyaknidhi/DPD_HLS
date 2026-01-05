@@ -7,11 +7,9 @@ Digital Predistortion Implemented via High level Synthesis language (Vivado HLS 
 
 This project implements a Digital Pre-Distortion (DPD) system based on an orthogonal polynomial representation to linearize the non-linear behavior of Radio Frequency (RF) Power Amplifiers (PAs). The work focuses on a structured, model-based DPD formulation that is amenable to fixed-point arithmetic and hardware implementation.
 
-The system simulates a complete digital communication transmit and receive chain, including constellation mapping, pulse shaping, digital up-conversion, non-linear PA modeling, digital down-conversion, and a feedback-based coefficient adaptation loop using an indirect learning architecture.
+The system simulates a complete digital communication transmit and receive chain, including constellation mapping, pulse shaping, digital up-conversion, modulator, non-linear PA modeling, demodulator, digital down-conversion, and a feedback-based coefficient adaptation loop using an indirect learning architecture.
 
 This implementation was developed in parallel with an evolutionary-optimization–based DPD approach, enabling a comparative study between model-structured and optimizer-driven DPD formulations.
-
----
 
 ## Motivation
 
@@ -20,8 +18,6 @@ Power Amplifiers (PAs) exhibit strong non-linear behavior when operated near sat
 Digital Pre-Distortion (DPD) mitigates these effects by applying an inverse non-linear transformation to the baseband signal prior to amplification. While global optimization techniques can achieve high modeling accuracy, practical hardware DPD implementations overwhelmingly rely on **structured polynomial models** due to their deterministic behavior, numerical stability, and lower computational complexity.
 
 This project investigates an orthogonal polynomial–based DPD formulation to understand its effectiveness, convergence behavior, and suitability for hardware-oriented realization.
-
----
 
 ## System Architecture
 
@@ -38,7 +34,6 @@ The DPD system follows an **Indirect Learning Architecture (ILA)**, where the in
 * **`FINAL` Mode**  
   The learned coefficients are applied to the forward path, demonstrating the linearization effect of the DPD.
 
----
 
 ## Key Features
 
@@ -77,15 +72,13 @@ Key design considerations include:
 - Sensitivity to coefficient quantization
 - Suitability for fixed-point arithmetic
 
----
 
 ## Implementation Notes
 
-* The implementation is written in C/C++ with a modular structure to allow gradual migration toward HLS or RTL-based realization.
+* The implementation is written in C/C++ with a modular structure to allow proper RTL-based realization using HLS tools.
 * Floating-point arithmetic is used for algorithmic validation, with clear identification of blocks requiring fixed-point redesign for hardware deployment.
 * The orthogonal polynomial formulation was evaluated alongside an evolutionary optimization–based DPD approach to understand practical trade-offs.
 
----
 
 ## Execution Flow
 
@@ -102,7 +95,6 @@ The program executes in three phases:
 
 All intermediate and final outputs are written to text files for post-processing and visualization.
 
----
 
 ## Output Files
 
@@ -116,13 +108,11 @@ The simulation generates `.txt` files containing floating-point I/Q samples and 
 
 These files can be analyzed using MATLAB, Python, or Octave to evaluate constellation integrity, AM/AM behavior, and spectral regrowth.
 
----
 
 ## Comparative Context
 
 This project was developed in parallel with a DPD implementation based on Modified Differential Evolution (MDE). While the MDE-based approach offers global optimization capability, the orthogonal polynomial model demonstrated superior determinism and hardware feasibility, highlighting why structured models are preferred in practical real-time DPD systems.
 
----
 
 ## Acknowledgements
 
